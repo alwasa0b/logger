@@ -1,10 +1,7 @@
-import { redirect, type LoaderArgs, type LoaderFunction, type MetaFunction } from "@remix-run/node";
+import type { LoaderArgs, LoaderFunction, MetaFunction } from "@remix-run/node";
 
-export const loader = ({ context }: LoaderArgs) => {
-  context.logger.info("whatever")
-  context.logger.error(new Error("something went wrong"))
-
-  throw redirect("/test")
+export const loader = ({ context, request }: LoaderArgs) => {
+  context.logger.warn("from test");
 
   return [
     { title: "New Remix App" },
