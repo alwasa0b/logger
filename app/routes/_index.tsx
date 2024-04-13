@@ -1,8 +1,6 @@
 import { redirect, type LoaderArgs, type LoaderFunction, type MetaFunction } from "@remix-run/node";
 
-export const loader = ({ context }: LoaderArgs) => {
-  context.logger.info("whatever")
-  context.logger.error(new Error("something went wrong"))
+export const loader = async ({ context }: LoaderArgs) => {
 
   throw redirect("/test")
 

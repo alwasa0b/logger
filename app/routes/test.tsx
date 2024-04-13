@@ -1,8 +1,18 @@
 import type { LoaderArgs, LoaderFunction, MetaFunction } from "@remix-run/node";
 
-export const loader = ({ context, request }: LoaderArgs) => {
-  context.logger.warn("from test");
+export const loader = async ({ context, request }: LoaderArgs) => {
+context.logger.info("testing");
+context.logger.warn("warn");
 
+context.logger.fatal("shutting down");
+
+
+try {
+  await fetch("http://localhost");
+} catch (error) {
+  context.logger.error(error);
+
+}
   return [
     { title: "New Remix App" },
     { name: "description", content: "Welcome to Remix!" },
@@ -10,6 +20,7 @@ export const loader = ({ context, request }: LoaderArgs) => {
 };
 
 export const meta: MetaFunction = () => {
+
   return [
     { title: "New Remix App" },
     { name: "description", content: "Welcome to Remix!" },

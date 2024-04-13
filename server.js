@@ -1,13 +1,76 @@
-import * as fs from "node:fs";
 import { createRequestHandler } from "@remix-run/express";
 import { installGlobals } from "@remix-run/node";
 import chalk from "chalk";
 import express from "express";
-import morgan from "morgan";
-import winston from "winston";
 import requestID from "express-request-id";
+import morgan from "morgan";
+import * as fs from "node:fs";
+import pino from "pino";
+import pinoMiddleWare from "pino-http";
+import pinoPrint from "pino-pretty";
+
+let minimatch;
+
+if (process.env.NODE_ENV === "development") {
+  minimatch = await import("minimatch");
+}
+
+const colored = {
+  default: chalk.white,
+  60: chalk.bgRed.bold,
+  50: chalk.red.bold,
+  40: chalk.yellow,
+  30: chalk.green,
+  20: chalk.blue,
+  10: chalk.gray,
+  method: chalk.cyan,
+};
 
 const start = Date.now();
+
+const prettyPrintFactory = pinoPrint({
+  colorize: true,
+  relativeUrl: false,
+  translateTime: false,
+  ignore: "level,time,req,res,responseTime,hostname,pid,reqId",
+  messageFormat: (log, messageKey) => {
+    const exclude = [/^\/(app)\/.+/, /^\/@.+$/, /^\/node_modules\/.*/];
+
+    if (process.env.NODE_ENV !== "production")
+      for (const pattern of exclude) {
+        if (log.req?.url) {
+          if (pattern instanceof RegExp) {
+            if (pattern.test(log.req?.url)) {
+              return;
+            }
+          } else if (minimatch(log.req?.url.toString(), pattern)) {
+            return;
+          }
+        }
+      }
+
+    const levelColor = colored[log.level] || colored.default;
+    const reqId = (log.reqId || log.req.id).split("-")[0];
+    const prefix = colored.default(
+      `[${new Date(log.time).toLocaleString()} ${reqId}]`
+    );
+
+    if (log.req) {
+      const url = `http://${log.req.headers.host}${log.req.url}`;
+      return colored.default(
+        `${prefix} ${log.req.method} ${levelColor(
+          log.res.statusCode
+        )} ${url} - ${log.responseTime}ms`
+      );
+    }
+
+    return `${prefix} ${levelColor(
+      pino.levels.labels[log.level].toUpperCase()
+    )} ${log[messageKey]}`;
+  },
+});
+
+const logger = pino(prettyPrintFactory);
 
 let viteVersion;
 let remixVersion;
@@ -34,28 +97,12 @@ let vite =
         })
       );
 
-const logger = winston.createLogger({
-  level: "info",
-  format: winston.format.json(),
-  defaultMeta: { service: "user-service" },
-  transports: [
-    new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.timestamp(),
-        winston.format.printf((info) => {
-          return `[${info.timestamp} ${info.requestId.split("-")[0]}] ${
-            info.level
-          }: ${info.message}`;
-        })
-      ),
-    }),
-  ],
-});
+const httpLogger = pinoMiddleWare({ logger });
 
 const app = express();
 
 app.use(requestID());
+app.use(httpLogger);
 
 morgan.token("id", (req) => {
   return req.id.split("-")[0];
@@ -82,9 +129,7 @@ app.all(
       ? () => vite.ssrLoadModule("virtual:remix/server-build")
       : await import("./build/server/index.js"),
     getLoadContext: (req) => {
-      const chld = logger.child({ requestId: req.id });
-      console.log = chld.info;
-      return { logger:chld };
+      return { logger: logger.child({ reqId: req.id }) };
     },
   })
 );
